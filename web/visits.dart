@@ -8,6 +8,11 @@ void main() {
     DB db = new DB();
     db.open();
     new VisitFormView(db);
+    
+    TableElement table = querySelector("#visits_table");
+    for (Visit v in db.visits){
+      new VisitRowView(v, table.addRow());
+    }
   }else{
     var p = querySelector("#main_msg");
       p..text = 'Necesitas un navegador más moderno'
@@ -150,7 +155,12 @@ class VisitFormView{
   
   void save(){
     loadFormInfo();
-    db.add(visit);
+    Future<Visit> future = db.add(visit);
+    future.whenComplete(saved);
+  }
+  
+  void saved(){
+    window.alert("Saved " + visit.id);
   }
 }
 
@@ -158,7 +168,7 @@ class Visit{
 
   var id;
   DateTime date;
-  int boys, girls, men, women;
+  var boys, girls, men, women;
   
   Visit(){
     date = new DateTime.now();
@@ -186,5 +196,15 @@ class Visit{
       'women': women,
     };
   }
-  
+}
+
+
+class VisitRowView {
+  VisitRowView(Visit visit, TableRowElement row){
+    row.addCell().text = visit.date.toLocal().toString();
+    row.addCell().text = visit.girls.toString();
+    row.addCell().text = visit.boys.toString();
+    row.addCell().text = visit.women.toString();
+    row.addCell().text = visit.men.toString();
+  }
 }
