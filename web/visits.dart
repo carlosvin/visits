@@ -7,10 +7,12 @@ void main() {
 
   if (DB.isSupported()){
     DB db = new DB();
-    db.open().whenComplete(drawList(db));
-    new VisitFormView(db);
+    VisitList visitList = new VisitList();
+    Saver saver = new Saver(db, visitList);
+    db.open().whenComplete(
+        visitList.drawList(db.visits));
     
-    
+    VisitFormView visitForm = new VisitFormView(saver);
   }else{
     var p = querySelector("#main_msg");
       p..text = 'Necesitas un navegador más moderno'
@@ -18,26 +20,60 @@ void main() {
   }
 }
 
-drawList (DB db){
-  TableElement table = querySelector("#visits_table");
-     for (Visit v in db.visits){
-       new VisitRowView(v, table.addRow());
-     }
+class VisitList extends SaverListener{
+  
+  TableElement _table;
+  
+  VisitList(){
+    _table = querySelector("#visits_table");
+  }
+  
+  drawList (List<Visit> visits){
+    for (Visit v in visits){
+      added(v);
+    }
+  }
+  
+  added(Visit visit){
+    new VisitRowView(visit, _table.addRow());
+  }
+
 }
 
+abstract class SaverListener {
+  added(Visit visit);
+}
+
+class Saver {
+  
+  DB _db;
+  SaverListener _listener;
+  
+  Saver(DB db, SaverListener listener){
+    _db = db;
+    _listener = listener;
+  }
+  
+  void add(Visit visit){
+    _db.add(visit).whenComplete(_listener.added(visit));
+  }
+  
+}
 
 class VisitFormView{
   
-  Visit visit;
-  DB db;
+  Visit _visit;
+  Saver _saver;
+  
+  //DB db;
   DateInputElement dateInput;
   NumberInputElement boysInput, girslInput, menInput, womenInput;
   ButtonElement button;
   Element form;
   
-  VisitFormView(DB db){
-    this.db = db;
-    visit = new Visit();
+  VisitFormView(Saver saver){
+    _visit = new Visit();
+    _saver = saver;
     dateInput = new DateInputElement();
     boysInput = new NumberInputElement();
     girslInput = new NumberInputElement();
@@ -57,18 +93,19 @@ class VisitFormView{
     form.append(womenInput);
     form.append(button);
     
-    dumpToForm();
+    loadToFrom(_visit);
   }
   
-  void loadFromForm(){
-    visit.boys = boysInput.valueAsNumber;
-    visit.girls = girslInput.valueAsNumber;
-    visit.men = menInput.valueAsNumber;
-    visit.women = womenInput.valueAsNumber;
-    visit.date = dateInput.valueAsDate;
+  Visit loadFromForm(){
+    _visit.boys = boysInput.valueAsNumber;
+    _visit.girls = girslInput.valueAsNumber;
+    _visit.men = menInput.valueAsNumber;
+    _visit.women = womenInput.valueAsNumber;
+    _visit.date = dateInput.valueAsDate;
+    return _visit;
   }
   
-  void dumpToForm(){
+  void loadToFrom(Visit visit){
     boysInput.valueAsNumber = visit.boys;
     girslInput.valueAsNumber = visit.girls;
     womenInput.valueAsNumber = visit.women;
@@ -76,13 +113,9 @@ class VisitFormView{
     dateInput.valueAsDate = visit.date;
   }
   
-  void save(){
+  save(){
     loadFromForm();
-    db.add(visit).whenComplete(saved);
-  }
-  
-  void saved(){
-    window.alert("Saved " + visit.getKey());
+    _saver.add(_visit);
   }
 }
 
