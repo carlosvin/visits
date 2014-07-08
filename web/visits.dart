@@ -1,6 +1,5 @@
 
 import 'dart:html';
-import 'dart:async';
 import 'visits_db.dart';
 
 void main() {
@@ -8,16 +7,21 @@ void main() {
   if (DB.isSupported()){
     DB db = new DB();
     VisitList visitList = new VisitList();
-    Saver saver = new Saver(db, visitList);
-    db.open().whenComplete(
-        visitList.drawList(db.visits));
-    
-    VisitFormView visitForm = new VisitFormView(saver);
+    db.open().
+      then(visitList.drawList(db.visits)).
+      catchError(onError);
+
+    //Saver saver = new Saver(db, visitList);
+    //VisitFormView visitForm = new VisitFormView(saver);
   }else{
-    var p = querySelector("#main_msg");
-      p..text = 'Necesitas un navegador más moderno'
-       ..classes.add('error'); 
+    querySelector("#main_msg")
+        ..text = 'Necesitas un navegador más moderno'
+        ..classes.add('error'); 
   }
+}
+
+onError(e){
+  print("error opening " + e.toString());
 }
 
 class VisitList extends SaverListener{
@@ -35,7 +39,12 @@ class VisitList extends SaverListener{
   }
   
   added(Visit visit){
-    new VisitRowView(visit, _table.addRow());
+    TableRowElement row = _table.addRow();
+    row.addCell().text = visit.date.toLocal().toString();
+    row.addCell().text = visit.girls.toString();
+    row.addCell().text = visit.boys.toString();
+    row.addCell().text = visit.women.toString();
+    row.addCell().text = visit.men.toString();
   }
 
 }
@@ -55,7 +64,13 @@ class Saver {
   }
   
   void add(Visit visit){
-    _db.add(visit).whenComplete(_listener.added(visit));
+    _db.add(visit)
+    .then(_listener.added(visit))
+    .catchError(error(visit));
+  }
+  
+  error(Visit visit){
+    print("error adding " + visit.date.toIso8601String());
   }
   
 }
@@ -83,7 +98,7 @@ class VisitFormView{
     button..id = 'save'
           ..text = 'Salvar'
           ..classes.add('important')
-          ..onClick.listen((e) => save());
+          ..onClick.listen((e) => save(e));
     
     form = querySelector("#input_visits");
     form.append(dateInput);
@@ -113,7 +128,8 @@ class VisitFormView{
     dateInput.valueAsDate = visit.date;
   }
   
-  save(){
+  save(Event e){
+    e.preventDefault(); 
     loadFromForm();
     _saver.add(_visit);
   }
@@ -153,16 +169,5 @@ class Visit{
   
   String getKey(){
     return date.toString();
-  }
-}
-
-
-class VisitRowView {
-  VisitRowView(Visit visit, TableRowElement row){
-    row.addCell().text = visit.date.toLocal().toString();
-    row.addCell().text = visit.girls.toString();
-    row.addCell().text = visit.boys.toString();
-    row.addCell().text = visit.women.toString();
-    row.addCell().text = visit.men.toString();
   }
 }

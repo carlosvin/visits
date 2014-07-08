@@ -15,8 +15,7 @@ class DB {
     return window.indexedDB.open(VISITS_DB,
         version: 1,
         onUpgradeNeeded: _initializeDatabase)
-      .then(_loadFromDB)
-      .catchError(_onError);
+      .then(_loadFromDB);
   }
 
   void _initializeDatabase(VersionChangeEvent e) {
@@ -26,11 +25,6 @@ class DB {
         autoIncrement: true);
     var index = objectStore.createIndex(DATE_INDEX, 'date',
         unique: true);
-  }
-  
-  void _onError(e) {
-    window.alert('Oh no! Something went wrong. See the console for details.');
-    window.console.log('An error occurred: {$e}');
   }
   
   Future _loadFromDB(Database db) {
