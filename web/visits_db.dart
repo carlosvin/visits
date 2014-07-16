@@ -1,18 +1,21 @@
+library visits_db;
+
 import 'dart:html';
 import 'dart:async';
-import 'visits.dart';
 import 'dart:indexed_db';
+import 'visits.dart';
 
 class DB {
-  static const String VISITS_STORE = 'visitsStore';
-  static const String VISITS_DB = 'visitsDB';
-  static const String DATE_INDEX = 'date_index';
   
-  var _db;
-  List<Visit> visits = new List();
+  final String store, dbName, index;
+  Database _db;
+  Map<String,Visit> visits = new Map();
+  
+  DB(this.store, this.dbName, this.index);
   
   Future open() {
-    return window.indexedDB.open(VISITS_DB,
+    return window.indexedDB.open(
+        dbName,
         version: 1,
         onUpgradeNeeded: _initializeDatabase)
       .then(_loadFromDB);
@@ -21,22 +24,22 @@ class DB {
   void _initializeDatabase(VersionChangeEvent e) {
     Database db = (e.target as Request).result;
     
-    var objectStore = db.createObjectStore(VISITS_STORE,
+    var objectStore = db.createObjectStore(store,
         autoIncrement: true);
-    var index = objectStore.createIndex(DATE_INDEX, 'date',
+    var indx = objectStore.createIndex(index, 'date',
         unique: true);
   }
   
   Future _loadFromDB(Database db) {
     _db = db;
 
-    var trans = db.transaction(VISITS_STORE, 'readonly');
-    var store = trans.objectStore(VISITS_STORE);
+    var trans = db.transaction(this.store, 'readonly');
+    var store = trans.objectStore(this.store);
 
     var cursors = store.openCursor(autoAdvance: true).asBroadcastStream();
     cursors.listen((cursor) {
       var visit = new Visit.fromRaw(cursor.value);
-      visits.add(visit);
+      visits[visit.getKey()] = visit;
     });
 
     return cursors.length.then((_) {
@@ -47,8 +50,8 @@ class DB {
   Future<Visit> add(Visit visit) {
      var visitAsMap = visit.toRaw();
 
-     var transaction = _db.transaction(VISITS_STORE, 'readwrite');
-     var objectStore = transaction.objectStore(VISITS_STORE);
+     var transaction = _db.transaction(store, 'readwrite');
+     var objectStore = transaction.objectStore(store);
      
      objectStore.add(visitAsMap, visit.getKey()).then((addedKey) {
        if (visit.getKey() == addedKey){
@@ -58,41 +61,44 @@ class DB {
        }
      });
      
-     // Note that the visit cannot be queried until the transaction
-     // has completed!
      return transaction.completed.then((_) {
-       // Once the transaction completes, add it to our list of available items.
-       visits.add(visit);
-       
-       // Return the visit so this becomes the result of the future.
+       visits[visit.getKey()]=visit;
        return visit;
      });
    }
+  
+  Future<Visit> update(Visit visit) {
+     var visitAsMap = visit.toRaw();
+
+     var transaction = _db.transaction(store, 'readwrite');
+     var objectStore = transaction.objectStore(store);
+     
+     objectStore.put(visitAsMap, visit.getKey()).
+      then((_)=>print("Updated " + visit.getKey())).
+      catchError((err)=>print(err));
+
+     return transaction.completed.then((_) {
+       visits[visit.getKey()] = visit;
+       return visit;
+     }).catchError((err)=> print(err));
+   }
    
-   // Removes a visit from the list of visits.
-   // 
-   // This returns a Future which completes when the visit has been removed.
    Future remove(Visit visit) {
-     // Remove from database.
-     var transaction = _db.transaction(VISITS_STORE, 'readwrite');
-     transaction.objectStore(VISITS_STORE).delete(visit.getKey());
+     var transaction = _db.transaction(store, 'readwrite');
+     transaction.objectStore(store).delete(visit.getKey());
      
      return transaction.completed.then((_) {
-       // Remove from internal list.
        visits.remove(visit);
-       // Null out the key to indicate that the visit is dead.
        visit.date = null;
      });
    }
    
    // Removes ALL visits.
    Future clear() {
-     // Clear database.
-     var transaction = _db.transaction(VISITS_STORE, 'readwrite');
-     transaction.objectStore(VISITS_STORE).clear();
+     var transaction = _db.transaction(store, 'readwrite');
+     transaction.objectStore(store).clear();
      
      return transaction.completed.then((_) {
-       // Clear internal list.
        visits.clear();
      });
    }

@@ -1,18 +1,25 @@
+library visits;
 
 import 'dart:html';
 import 'visits_db.dart';
+import 'dart:async';
+
+String VISITS_STORE = 'visitsStore';
+String VISITS_DB = 'visitsDatabase';
+String DATE_INDEX = 'date_index';
 
 void main() {
 
   if (DB.isSupported()){
-    DB db = new DB();
+    DB db = new DB(VISITS_STORE, VISITS_DB, DATE_INDEX);
     VisitList visitList = new VisitList();
+    VisitFormView visitForm = new VisitFormView(db, visitList);
+    
     db.open().
-      then(visitList.drawList(db.visits)).
+      then(visitList.drawList(db.visits.values, visitForm)).
       catchError(onError);
 
-    //Saver saver = new Saver(db, visitList);
-    //VisitFormView visitForm = new VisitFormView(saver);
+
   }else{
     querySelector("#main_msg")
         ..text = 'Necesitas un navegador más moderno'
@@ -24,61 +31,50 @@ onError(e){
   print("error opening " + e.toString());
 }
 
-class VisitList extends SaverListener{
+class VisitList {
   
   TableElement _table;
+  Map<String, TableRowElement> rows = new Map();
   
   VisitList(){
     _table = querySelector("#visits_table");
   }
   
-  drawList (List<Visit> visits){
+  drawList (Iterable<Visit> visits, VisitFormView form){
     for (Visit v in visits){
-      added(v);
+      update(v, form);
     }
   }
   
-  added(Visit visit){
-    TableRowElement row = _table.addRow();
-    row.addCell().text = visit.date.toLocal().toString();
-    row.addCell().text = visit.girls.toString();
-    row.addCell().text = visit.boys.toString();
-    row.addCell().text = visit.women.toString();
-    row.addCell().text = visit.men.toString();
+  update(Visit visit, VisitFormView form){
+    TableRowElement row;
+    if (rows.containsKey(visit.getKey())){
+      row = rows[visit.getKey()];    
+    }else{
+      row = _table.addRow();
+      for (var i=0; i<5; i++){
+        row.addCell();
+      }
+      row.onClick.listen((MouseEvent e){
+        form.loadToFrom(visit);
+      });
+      rows[visit.getKey()] = row;
+    }
+    
+    row.cells[0].text = visit.date.toLocal().toString();
+    row.cells[1].text = visit.girls.toString();
+    row.cells[2].text = visit.boys.toString();
+    row.cells[3].text = visit.women.toString();
+    row.cells[4].text = visit.men.toString();
+    
   }
 
-}
-
-abstract class SaverListener {
-  added(Visit visit);
-}
-
-class Saver {
-  
-  DB _db;
-  SaverListener _listener;
-  
-  Saver(DB db, SaverListener listener){
-    _db = db;
-    _listener = listener;
-  }
-  
-  void add(Visit visit){
-    _db.add(visit)
-    .then(_listener.added(visit))
-    .catchError(error(visit));
-  }
-  
-  error(Visit visit){
-    print("error adding " + visit.date.toIso8601String());
-  }
-  
 }
 
 class VisitFormView{
   
   Visit _visit;
-  Saver _saver;
+  DB _db;
   
   //DB db;
   DateInputElement dateInput;
@@ -86,9 +82,9 @@ class VisitFormView{
   ButtonElement button;
   Element form;
   
-  VisitFormView(Saver saver){
+  VisitFormView(DB db, VisitList list){
     _visit = new Visit();
-    _saver = saver;
+    _db = db;
     dateInput = new DateInputElement();
     boysInput = new NumberInputElement();
     girslInput = new NumberInputElement();
@@ -98,7 +94,7 @@ class VisitFormView{
     button..id = 'save'
           ..text = 'Salvar'
           ..classes.add('important')
-          ..onClick.listen((e) => save(e));
+          ..onClick.listen((e) => save(e).then((visit)=>list.update(visit, this)).catchError((err) => print(err)));
     
     form = querySelector("#input_visits");
     form.append(dateInput);
@@ -126,12 +122,17 @@ class VisitFormView{
     womenInput.valueAsNumber = visit.women;
     menInput.valueAsNumber = visit.men;
     dateInput.valueAsDate = visit.date;
+    loadFromForm();
   }
   
-  save(Event e){
+  Future<Visit> save(Event e){
     e.preventDefault(); 
     loadFromForm();
-    _saver.add(_visit);
+    if (_db.visits.containsKey(_visit.getKey())){
+      return _db.update(_visit);
+    }else{
+      return _db.add(_visit);
+    }
   }
 }
 
